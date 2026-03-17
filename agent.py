@@ -5,6 +5,7 @@ from openai import OpenAI
 from ddgs import DDGS
 from config import cfg
 from database import is_seen, mark_seen
+from scraper import enrich_results
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=cfg.OPENAI_API_KEY)
@@ -139,6 +140,7 @@ def hunt_pains(niche: str, count: int = 5) -> list[dict]:
 
     # Step 2 — search and collect results
     pool = search_all(queries)
+    pool = enrich_results(pool)  # add title and snippet if missing, for better analysis
 
     if not pool:
         logger.warning("No results found for '%s'", niche)
@@ -177,6 +179,8 @@ def format_pain(pain: dict, index: int = 1) -> str:
     quote   = pain.get("quote", "")
     niche   = pain.get("niche", "")
     title   = pain.get("title", "No title")
+    root_cause = pain.get("root_cause", "")
+    solution   = pain.get("solution_hint", "")
 
     return (
         f"🔴 Pain #{index} — {title}\n"
@@ -186,6 +190,8 @@ def format_pain(pain: dict, index: int = 1) -> str:
         f"   Frequency: {freq}\n"
         f"   Emotion:  {emotion}\n"
         f"   {money}\n\n"
+        f"\n🧠 Why pain: {root_cause}\n"
+        f"💡 How to solve: {solution}\n"  
         f'🔗 <a href="{source}">Source</a>\n<code>{source[:60]}...</code>'
     )
 

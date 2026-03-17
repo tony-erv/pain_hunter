@@ -49,7 +49,11 @@ class Config:
 Given a niche, generate 5 search queries to find real user complaints on Reddit.
 
 Rules:
-- Use site:reddit.com in ALL queries
+- Use these sources (mix them):
+  site:reddit.com — general frustrations
+  site:news.ycombinator.com — tech founders and developers
+  site:indiehackers.com — bootstrapped founders
+- 3 queries on reddit.com, 1 on news.ycombinator.com, 1 on indiehackers.com
 - Do NOT use site:quora.com (poor results)
 - Keep niche as free keywords, no quotes around them
 - Add ONE pain marker per query (no quotes):
@@ -93,6 +97,8 @@ Return ONLY valid JSON array, no markdown, no explanation:
     "frequency": 3,
     "emotion": 4,
     "monetizable": true,
+    "root_cause": "why this pain exists (1 sentence)",
+    "solution_hint": "how to solve with code/SaaS/bot (1-2 sentences)"
     "score": 3.5
   }
 ]"""
