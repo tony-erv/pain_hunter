@@ -33,7 +33,7 @@ async def send_pains(chat_id: int, pains: list, context: ContextTypes.DEFAULT_TY
             chat_id=chat_id,
             text=msg,
             parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True
+            disable_web_page_preview=False
         )
         await asyncio.sleep(0.3)  # pause between messages to avoid flooding
 
