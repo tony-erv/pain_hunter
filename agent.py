@@ -167,33 +167,38 @@ def score_to_stars(score: float) -> str:
     return "⭐" * stars + "☆" * (5 - stars)
 
 def format_pain(pain: dict, index: int = 1) -> str:
-    """
-    Format a pain dict into a nice string for Telegram message.
-    """
-    score   = pain.get("score", 0)
-    stars   = score_to_stars(score)
-    money   = "✅ Can solve by coding" if pain.get("monetizable") else "❌ Hard to monetize"
-    freq    = "⭐" * pain.get("frequency", 3)
-    emotion = "🔥" * pain.get("emotion", 3)
-    source  = pain.get("source", "")
-    quote   = pain.get("quote", "")
-    niche   = pain.get("niche", "")
-    title   = pain.get("title", "No title")
-    root_cause = pain.get("root_cause", "")
-    solution   = pain.get("solution_hint", "")
+    score       = pain.get("score", 0)
+    stars       = score_to_stars(score)
+    money       = "✅ Решается кодом" if pain.get("monetizable") else "❌ Сложно монетизировать"
+    freq        = "⭐" * pain.get("frequency", 3)
+    emotion     = "🔥" * pain.get("emotion", 3)
+    source      = pain.get("source", "")
+    quote       = pain.get("quote", "")
+    niche       = pain.get("niche", "")
+    title       = pain.get("title", "No title")
+    root_cause  = pain.get("root_cause", "")
+    solution    = pain.get("solution_hint", "")
 
-    return (
-        f"🔴 Pain #{index} — {title}\n"
-        f"Niche: {niche}\n\n"
-        f'💬 "{quote}"\n\n'
-        f"📊 Rating: {stars}\n"
-        f"   Frequency: {freq}\n"
-        f"   Emotion:  {emotion}\n"
-        f"   {money}\n\n"
-        f"\n🧠 Why pain: {root_cause}\n"
-        f"💡 How to solve: {solution}\n"  
-        f'🔗 <a href="{source}">Source</a>\n<code>{source[:60]}...</code>'
+    text = (
+        f"🔴 <b>Pain #{index} — {title}</b>\n"
+        f"Ниша: {niche}\n\n"
+        f'💬 <i>"{quote}"</i>\n\n'
+        f"📊 Рейтинг: {stars}\n"
+        f"   Частота: {freq}\n"
+        f"   Эмоции:  {emotion}\n"
+        f"   {money}\n"
     )
+
+    if root_cause:
+        text += f"\n🧠 <b>Почему существует:</b> {root_cause}\n"
+
+    if solution:
+        text += f"💡 <b>Как решить:</b> {solution}\n"
+
+    if source:
+        text += f'\n🔗 <a href="{source}">Источник</a>'
+
+    return text
 
 def format_digest(pains: list[dict]) -> list[str]:
     """

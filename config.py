@@ -45,63 +45,117 @@ class Config:
     "site:reddit.com {niche} tired of doing manually",
 ]
 
-    QUERY_GEN_PROMPT = """You are a market research expert.
-Given a niche, generate 5 search queries to find real user complaints on Reddit.
+    QUERY_GEN_PROMPT = """You are a market research expert hunting for startup opportunities.
+Given a niche, generate 5 search queries that find MONETIZABLE pains —
+problems people would pay to have solved.
 
-Rules:
-- Use these sources (mix them):
-  site:reddit.com — general frustrations
-  site:news.ycombinator.com — tech founders and developers
-  site:indiehackers.com — bootstrapped founders
-- 3 queries on reddit.com, 1 on news.ycombinator.com, 1 on indiehackers.com
-- Do NOT use site:quora.com (poor results)
-- Keep niche as free keywords, no quotes around them
-- Add ONE pain marker per query (no quotes):
-  frustrated, annoying, automate, hate, manual, problem,
-  tired, wish, impossible, broken, sucks
-- Vary subreddits when relevant (e.g. r/sysadmin, r/accounting)
-- Return ONLY a JSON array of 5 strings, nothing else
+TARGET: posts where people describe a recurring painful manual process,
+ask if a tool exists, or complain that existing solutions are too expensive.
+
+Search sources (use the mix below):
+- 3 queries: site:reddit.com
+- 1 query:   site:news.ycombinator.com
+- 1 query:   site:indiehackers.com
+
+Query construction rules:
+- Niche keywords: NO quotes, free keywords only
+- Each query must have ONE of these high-signal phrases (no quotes):
+    "is there a tool"
+    "I have to manually"
+    "I spend hours"
+    "does anyone else"
+    "too expensive"
+    "I built this because"
+    "I'd pay for"
+    "looking for software"
+    "automate this"
+    "wish there was"
+- For Reddit: vary subreddits when relevant (r/sysadmin, r/Accounting, etc.)
+- NO generic markers like "hate", "frustrated", "problem" — too noisy
+
+Return ONLY a JSON array of 5 strings, nothing else.
 
 Examples for niche "accountants Canada":
 [
-  "site:reddit.com accountants Canada frustrated manual process",
-  "site:reddit.com Canadian accountant tax software problem",
-  "site:reddit.com r/Accounting Canada wish automation tool",
-  "site:reddit.com bookkeeping Canada annoying client invoices",
-  "site:reddit.com CPA Canada hate manual data entry 2024"
+  "site:reddit.com r/Accounting accountants Canada is there a tool invoicing automation",
+  "site:reddit.com Canadian accountant I have to manually reconcile every month",
+  "site:reddit.com bookkeeping Canada too expensive software small business",
+  "site:news.ycombinator.com accountants Canada I built this because no tool existed",
+  "site:indiehackers.com accounting Canada automate this wish there was"
+]
+
+Examples for niche "system administrators":
+[
+  "site:reddit.com r/sysadmin I spend hours monitoring servers manually",
+  "site:reddit.com sysadmin is there a tool patch management automated",
+  "site:reddit.com r/homelab system administrator too expensive enterprise only",
+  "site:news.ycombinator.com sysadmin I built this because monitoring was broken",
+  "site:indiehackers.com system administrators I'd pay for automated alerts"
 ]"""
 
-    PAIN_ANALYSIS_PROMPT = """You are a startup opportunity analyst.
-Analyze these Reddit search results and extract user pain points.
+    PAIN_ANALYSIS_PROMPT = """You are a brutal startup opportunity analyst.
+Your job: find ONLY pains worth building a business around.
 
-For each pain found, score it:
-- frequency (1-5): how often is this type of problem mentioned?
-- emotion (1-5): frustration level (5 = very angry/frustrated)
-- monetizable (true/false): can this be solved with software/SaaS/bot?
-- score: average of frequency and emotion (e.g. freq=4, emotion=3 → score=3.5)
+Analyze the provided search results and extract user pain points.
 
-IMPORTANT:
-- Extract pain points even from general discussions if they contain complaints
-- A post title like "My rant on CPA" or "frustrated with tax software" IS a pain
-- If snippet is short, infer the pain from the title and context
-- Include pains with score >= 2.0 (be generous)
-- Return empty array [] ONLY if results are completely irrelevant (cooking, sex, etc.)
+SCORING CRITERIA:
+- frequency (1-5): how many different people face this repeatedly?
+  1 = one person, one time
+  5 = thousands of people, every week
+- emotion (1-5): frustration intensity
+  1 = mild inconvenience
+  5 = costs them money/clients/time, they're furious
+- monetizable (true/false): would someone pay $10-500/month to fix this?
+- score = (frequency + emotion) / 2
 
-Return ONLY valid JSON array, no markdown, no explanation:
+INCLUDE a pain if ALL of these are true:
+✓ Affects many people repeatedly (not a one-time incident)
+✓ No obvious good solution exists yet (or existing ones are too expensive)
+✓ Can be solved with software, automation, or a bot
+✓ Score >= 3.0
+✓ Person describes a specific negative experience or recurring frustration
+✓ Language signals pain: "I hate", "I have to manually", "costs me", 
+  "I keep losing", "every time I", "I've tried everything"
+
+EXCLUDE a pain if ANY of these are true:
+✗ It's a bug or policy of one specific company (e.g. "realtor.com glitch")
+✗ It requires changing human behavior, laws, or regulations
+✗ It's a one-time event ("my agent ignored me once")
+✗ A good cheap solution already exists
+✗ Score < 3.0
+✗ It's a question asking for recommendations (not a complaint about a problem)
+✗ Posts starting with "What do you use for...", "Which tool do you recommend...",
+  "Has anyone tried..." — these are research, not pain signals
+
+FOR QUOTES:
+- Use ONLY text that actually appears in the search result
+- If no clear quote exists, use the post title
+- Never invent or paraphrase as a quote
+
+FOR SOLUTION HINT — be specific:
+- What exactly does the product do? (1 sentence)
+- Who pays and roughly how much? (1 sentence)
+- Example: "A Slack bot that monitors response times between agents and auto-escalates 
+  after 24h silence. Realtors pay $29/month per agent."
+
+Return ONLY valid JSON array, no markdown, no explanation.
+Return [] if no pains meet the criteria above.
+
 [
   {
     "title": "short pain title (max 8 words)",
-    "quote": "best quote from title+snippet (max 150 chars)",
+    "quote": "exact text from the source (max 150 chars)",
     "source": "url",
     "niche": "niche name",
-    "frequency": 3,
-    "emotion": 4,
+    "frequency": 4,
+    "emotion": 5,
     "monetizable": true,
-    "root_cause": "why this pain exists (1 sentence)",
-    "solution_hint": "how to solve with code/SaaS/bot (1-2 sentences)"
-    "score": 3.5
+    "root_cause": "one sentence: why this problem exists structurally",
+    "solution_hint": "specific product idea + who pays + price range",
+    "score": 4.5
   }
 ]"""
+
 
     def validate(self):
         """Check that all required env variables are set."""

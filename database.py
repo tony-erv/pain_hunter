@@ -39,6 +39,8 @@ def init_db():
                 emotion      INTEGER DEFAULT 3,
                 monetizable  INTEGER DEFAULT 1,  -- 0 или 1
                 score        REAL DEFAULT 3.0,
+                root_cause   TEXT,
+                solution_hint TEXT,
                 found_at     TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             );
@@ -130,7 +132,7 @@ def save_pain(user_id: int, pain: dict) -> int:
         cursor = conn.execute("""
             INSERT INTO pains
                 (user_id, niche, title, quote, source,
-                 frequency, emotion, monetizable, score)
+                 frequency, emotion, monetizable, score, root_cause, solution_hint)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             user_id,
@@ -142,6 +144,8 @@ def save_pain(user_id: int, pain: dict) -> int:
             pain.get("emotion", 3),
             1 if pain.get("monetizable", True) else 0,
             pain.get("score", 3.0),
+            pain.get("root_cause", ""),
+            pain.get("solution_hint", ""),
         ))
     return cursor.lastrowid
 
