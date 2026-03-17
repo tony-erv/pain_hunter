@@ -125,15 +125,13 @@ def increment_hunt(user_id: int):
 # --- Pains ---------------
 
 def save_pain(user_id: int, pain: dict) -> int:
-    """
-    Save a pain record to the database. Returns the new pain ID.
-    """
     with get_conn() as conn:
         cursor = conn.execute("""
             INSERT INTO pains
                 (user_id, niche, title, quote, source,
-                 frequency, emotion, monetizable, score, root_cause, solution_hint)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 frequency, emotion, monetizable, score,
+                 root_cause, solution_hint)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             user_id,
             pain.get("niche", ""),
@@ -144,10 +142,11 @@ def save_pain(user_id: int, pain: dict) -> int:
             pain.get("emotion", 3),
             1 if pain.get("monetizable", True) else 0,
             pain.get("score", 3.0),
-            pain.get("root_cause", ""),
-            pain.get("solution_hint", ""),
+            pain.get("root_cause", ""),     
+            pain.get("solution_hint", ""),   
         ))
     return cursor.lastrowid
+
 
 def get_saved_pains(user_id: int, limit: int = 10) -> list:
     """Return a list of saved pains for the user, ordered by found_at desc."""
