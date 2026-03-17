@@ -8,8 +8,9 @@ logger = logging.getLogger(__name__)
 
 def get_conn():
     """Return a new database connection with dict-like row access."""
+    os.makedirs(cfg.DATA_DIR, exist_ok=True)  # create data directory if it doesn't exist
     conn = sqlite3.connect(cfg.DB_PATH)
-    conn.row_factory = sqlite3.Row  # dict-like access: row["field"]
+    conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
@@ -212,4 +213,3 @@ def cleanup_old_hashes():
         """, (f"-{cfg.HASH_TTL_DAYS}",))
     logger.info("Cleaned up hashes older than %d days", cfg.HASH_TTL_DAYS)
 
-    
