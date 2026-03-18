@@ -11,9 +11,3 @@ Pain Hunter is an AI-powered tool designed to identify real user pain points fro
 - **Database Integration**: Save and manage user data, pain points, and statistics.
 - **Daily Digest**: Receive fresh pain points every morning for selected niches.
 
-## Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/pain_hunter.git
-   cd pain_hunter
