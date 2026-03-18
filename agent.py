@@ -1,11 +1,12 @@
 import json
 import logging
+import re
 import time
 import httpx
 from openai import OpenAI
 from config import cfg
 from database import is_seen, mark_seen
-from scraper import enrich_results
+from scraper import enrich_results, fetch_g2_reviews, fetch_capterra_reviews
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=cfg.OPENAI_API_KEY)
@@ -14,6 +15,16 @@ HEADERS = {
     "User-Agent": "PainHunter/1.0 (research tool; contact: tony.ervalson@gmail.com)",
     "Accept": "application/json",
 }
+
+# Titles matching these patterns are spam/noise — skip before hitting the LLM.
+# Add patterns here as new spam types are discovered in logs.
+_TITLE_BLOCKLIST = re.compile(
+    r"industry news recap|week of \w+ \d+|"
+    r"weekly digest|weekly roundup|weekly wrap|"
+    r"this week('s| in)|top stories|"
+    r"hiring|we('re| are) hiring|job opening|job post",
+    re.IGNORECASE,
+)
 
 # ── Step 1: Generate queries ──────────────────────────────────────────────────
 
@@ -46,7 +57,7 @@ def generate_queries(niche: str) -> list[dict]:
 
 # ── Step 2: Search ────────────────────────────────────────────────────────────
 
-def search_reddit(query: str, subreddit: str = "", limit: int = 15) -> list[dict]:
+def search_reddit(query: str, subreddit: str = "", limit: int = 20) -> list[dict]:
     """
     Search Reddit within a specific subreddit when provided.
     - If subreddit is given: hits /r/SUBREDDIT/search.json — zero off-topic noise
@@ -86,6 +97,9 @@ def search_reddit(query: str, subreddit: str = "", limit: int = 15) -> list[dict
             d = p["data"]
             if d.get("score", 0) < 2 and d.get("num_comments", 0) < 1:
                 continue
+            title = d.get("title", "")
+            if _TITLE_BLOCKLIST.search(title):
+                continue   # spam / news digest — skip before touching LLM
             results.append({
                 "title":        d.get("title", ""),
                 "href":         f"https://www.reddit.com{d.get('permalink', '')}",
@@ -137,6 +151,135 @@ def search_hn(query: str, limit: int = 8) -> list[dict]:
     except Exception as e:
         logger.warning("HN search failed: %s", e)
         return []
+
+
+
+
+def search_producthunt(query: str, limit: int = 8) -> list[dict]:
+    """
+    Search Product Hunt via DDG site: search.
+    Targets comment signals: missing features, competitor comparisons, "would be better if".
+    """
+    results: list[dict] = []
+    try:
+        from ddgs import DDGS
+        with DDGS() as ddgs:
+            # Two queries: "Ask PH" posts (user problems) + product comments (missing features)
+            hits = []
+            for q in [
+                f'site:producthunt.com "{query}" "manually" OR "I built" OR "switched from" OR "missing"',
+                f'site:producthunt.com "{query}" "would be better" OR "wish it" OR "cant" OR "no way to"',
+            ]:
+                hits += list(ddgs.text(q, max_results=limit // 2))
+        kept = 0
+        for h in hits:
+            body = h.get("body", "")
+            href = h.get("href", "")
+            # Skip pure product listing pages without review/comment content
+            if href.endswith("/upcoming") or "?ref=" in href:
+                continue
+            if len(body) < 60:
+                continue
+            results.append({
+                "title":        h.get("title", ""),
+                "href":         href,
+                "body":         body[:500],
+                "score":        0,
+                "num_comments": 0,
+                "source_type":  "producthunt",
+            })
+            kept += 1
+        logger.info("Product Hunt: %d results for '%s'", kept, query)
+    except Exception as e:
+        logger.warning("Product Hunt search failed: %s", e)
+    return results
+
+
+def search_amazon_reviews(niche: str, limit: int = 8) -> list[dict]:
+    """
+    Find negative Amazon reviews via DDG + direct page fetch.
+    
+    DDG path: targets amazon.com/product-reviews pages with negative signals.
+    Direct fetch: appends filterByStar=critical to get 1-3 star reviews,
+    then extracts review body text via data-hook attribute.
+    """
+    import re as _re
+    results: list[dict] = []
+
+    # DDG: find Amazon review pages with negative signals
+    try:
+        from ddgs import DDGS
+        with DDGS() as ddgs:
+            # Use /gp/customer-reviews/ path — more specific than /product-reviews
+            # Add "stars:1-3" equivalent signals and exclude app/movie noise
+            hits = list(ddgs.text(
+                f'site:amazon.com "{niche}" book OR software review "does not" OR "missing" OR "wish it" OR "manually" -app -movie -film',
+                max_results=limit,
+            ))
+        kept = 0
+        for h in hits:
+            body = h.get("body", "")
+            href = h.get("href", "")
+            # Skip non-review Amazon pages (search results, product pages)
+            if not any(p in href for p in ["/product-reviews/", "/customer-reviews/", "/dp/"]):
+                continue
+            if len(body) < 60:
+                continue
+            results.append({
+                "title":        h.get("title", ""),
+                "href":         href,
+                "body":         body[:500],
+                "score":        0,
+                "num_comments": 0,
+                "source_type":  "amazon",
+            })
+            kept += 1
+        logger.info("Amazon DDG: %d results for '%s'", kept, niche)
+    except Exception as e:
+        logger.warning("Amazon DDG search failed: %s", e)
+        return results
+
+    # Direct fetch: enrich with full review text from critical reviews page
+    data_hook_re = _re.compile(
+        r'data-hook="review-body"[^>]*>[^<]*<span[^>]*>(.*?)</span>',
+        _re.DOTALL,
+    )
+    tag_re = _re.compile(r"<[^>]+>")
+
+    for r in results:
+        href = r.get("href", "")
+        if "amazon.com/product-reviews" not in href:
+            continue
+        try:
+            base = href.split("?")[0]
+            review_url = base + "?filterByStar=critical&sortBy=recent"
+            resp = httpx.get(
+                review_url,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/122.0.0.0 Safari/537.36"
+                    ),
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+                timeout=10,
+                follow_redirects=True,
+            )
+            if resp.status_code == 200:
+                texts = data_hook_re.findall(resp.text)
+                if texts:
+                    cleaned = " | ".join(
+                        tag_re.sub(" ", t).strip()[:300]
+                        for t in texts[:3]
+                    )
+                    if len(cleaned) > 40:
+                        r["body"] = cleaned
+            time.sleep(1.0)
+        except Exception:
+            pass
+
+    return results
 
 
 def search_all(queries: list[dict]) -> list[dict]:
@@ -237,7 +380,35 @@ def analyze_pains(pool: list[dict], niche: str) -> list[dict]:
         logger.warning("Empty pool — nothing to analyze")
         return []
 
-    context = ""
+    # Build keyword frequency map from ALL pool items (not just top 20)
+    # This gives LLM real data for the frequency dimension instead of guessing.
+    import re as _re
+    pain_keywords = [
+        "manually", "spreadsheet", "hours", "every week", "every month",
+        "broken", "missing", "no tool", "wish there was", "looking for",
+        "automate", "tedious", "nightmare", "killing me", "waste of time",
+    ]
+    keyword_counts: dict[str, int] = {}
+    for r in pool:
+        text = (r.get("title", "") + " " + r.get("body", "")).lower()
+        for kw in pain_keywords:
+            if kw in text:
+                keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
+
+    # Include keyword frequency summary in context so LLM can calibrate
+    freq_summary = ", ".join(
+        f'"{kw}" x{cnt}'
+        for kw, cnt in sorted(keyword_counts.items(), key=lambda x: -x[1])
+        if cnt > 0
+    )
+    freq_header = (
+        f"KEYWORD FREQUENCY ACROSS ALL {len(pool)} ITEMS IN POOL:\n"
+        f"{freq_summary or 'none'}\n"
+        f"Use these counts to calibrate frequency scores — "
+        f"a keyword appearing 1-2x = freq 2, 3-5x = freq 3, 6-10x = freq 4, 10+x = freq 5\n\n"
+    )
+
+    context = freq_header
     for i, r in enumerate(pool[:20], 1):
         context += (
             f"[{i}] {r.get('title', '')}\n"
@@ -279,8 +450,37 @@ def analyze_pains(pool: list[dict], niche: str) -> list[dict]:
         for p in pains:
             p.setdefault("niche", niche)
         pains.sort(key=lambda x: x.get("score", 0), reverse=True)
-        logger.info("Found %d pains after sorting", len(pains))
-        return pains
+
+        # Deduplicate: skip pains whose source URL already appeared
+        # and pains with near-identical titles (same topic, different post)
+        seen_urls: set[str] = set()
+        seen_title_words: list[set] = []
+        deduped = []
+        for p in pains:
+            url = p.get("source", "")
+            title_words = set(p.get("title", "").lower().split()) - {"a","the","is","of","and","to","in","for","with"}
+            # Skip if same URL
+            if url and url in seen_urls:
+                logger.info("  DEDUP (same URL): %s", p.get("title","")[:60])
+                continue
+            # Skip if title overlaps >60% with an already-kept pain
+            is_dup = False
+            for kept_words in seen_title_words:
+                if len(title_words) > 0:
+                    overlap = len(title_words & kept_words) / len(title_words)
+                    if overlap > 0.6:
+                        logger.info("  DEDUP (similar title): %s", p.get("title","")[:60])
+                        is_dup = True
+                        break
+            if is_dup:
+                continue
+            deduped.append(p)
+            if url:
+                seen_urls.add(url)
+            seen_title_words.append(title_words)
+
+        logger.info("Found %d pains after dedup (was %d)", len(deduped), len(pains))
+        return deduped
 
     except (json.JSONDecodeError, Exception) as e:
         logger.error("Analysis failed: %s", e)
@@ -289,22 +489,93 @@ def analyze_pains(pool: list[dict], niche: str) -> list[dict]:
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
+def search_review_sites(niche: str) -> list[dict]:
+    """
+    Get negative reviews from G2 and Capterra via DuckDuckGo search snippets.
+
+    WHY SNIPPETS INSTEAD OF DIRECT SCRAPING:
+    Both G2 and Capterra run Cloudflare WAF that blocks datacenter IPs with 403.
+    However, DDG search results include rich snippets from their pages —
+    often containing the exact cons/dislike text — without needing to fetch
+    the actual page. This gives us the signal without the block.
+
+    Searches used:
+      - 'site:g2.com "{niche}" "what I dislike"'
+      - 'site:capterra.com "{niche}" software reviews'
+    """
+    from ddgs import DDGS   # imported here to keep it optional — if not installed, degrades gracefully
+
+    pool: list[dict] = []
+    seen_in_batch: set[str] = set()
+
+    # Target review-specific subpaths — avoids category/listing pages
+    # "manually" co-occurrence narrows to workflow pain signals
+    queries = [
+        (f'site:g2.com/reviews {niche} dislike manually',        "g2"),
+        (f'site:g2.com/reviews {niche} "what I dislike"',         "g2"),
+        (f'site:capterra.com/reviews {niche} cons manually',      "capterra"),
+    ]
+
+    for query, source_type in queries:
+        logger.info("Review search [%s]: %s", source_type, query)
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=5))
+            for r in results:
+                url  = r.get("href", "")
+                body = r.get("body", "")
+                if not url or len(body) < 40:
+                    continue
+                if url in seen_in_batch or is_seen(url):
+                    continue
+                pool.append({
+                    "title":        r.get("title", ""),
+                    "href":         url,
+                    "body":         body[:600],
+                    "score":        0,
+                    "num_comments": 0,
+                    "source_type":  source_type,
+                })
+                seen_in_batch.add(url)
+            time.sleep(1.0)
+        except Exception as e:
+            logger.warning("Review search failed [%s]: %s", source_type, e)
+            continue
+
+    logger.info("Review sites total: %d fresh items", len(pool))
+    return pool
+
+
 def hunt_pains(niche: str, count: int = 5) -> list[dict]:
     """
     Full pipeline:
-      1. Generate queries with specific subreddits (eliminates off-topic noise)
-      2. Search Reddit within target subreddits + HN
+      1. Generate queries with specific subreddits
+      2. Search Reddit (subreddit-targeted) + HN
       3. Enrich Reddit posts (full text + top comments)
-      4. Quick-filter: remove obvious trash
-      5. Full pain analysis with scoring
-      6. Mark all seen URLs
+      4. Search Product Hunt (DDG site: + comment signals)
+      5. Search Amazon negative reviews (DDG + direct fetch)
+      6. Merge all sources → quick-filter → full analysis
+      7. Mark all seen URLs
     """
     logger.info("=== hunt_pains started: '%s' ===", niche)
 
-    queries = generate_queries(niche)
-    pool    = search_all(queries)
-    pool    = enrich_results(pool)
-    pool    = quick_filter(pool)
+    queries      = generate_queries(niche)
+    reddit_pool  = search_all(queries)
+    reddit_pool  = enrich_results(reddit_pool)
+
+    # Product Hunt + Amazon: additional pain signal sources
+    # Product Hunt: DDG ignores site: operator for PH — returns unrelated pages.
+    # Disabled until a direct API approach is found.
+    # ph_pool = search_producthunt(niche)
+    amazon_pool = search_amazon_reviews(niche)
+
+    pool = reddit_pool + amazon_pool
+    logger.info(
+        "Pool: %d items (reddit/hn=%d, amazon=%d)",
+        len(pool), len(reddit_pool), len(amazon_pool),
+    )
+
+    pool = quick_filter(pool)
 
     if not pool:
         logger.warning("No results survived filtering for '%s'", niche)

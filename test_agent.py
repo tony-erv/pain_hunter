@@ -9,7 +9,7 @@ init_db()
 
 
 print("\n=== ТЕСТ 3: Полный hunt_pains ===")
-pains = hunt_pains("e-commerce sellers", count=3)
+pains = hunt_pains("cybersecurity", count=3)
 messages = format_digest(pains)
 for msg in messages:
     print("\n" + msg)

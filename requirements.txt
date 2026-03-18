@@ -3,3 +3,4 @@ python-dotenv
 python-telegram-bot[job-queue]
 httpx
 apscheduler
+ddgs

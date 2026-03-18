@@ -143,6 +143,12 @@ DISCARD only if it CLEARLY matches one of these:
 ✗ Tutorial, how-to guide, or documentation with no frustration expressed
 ✗ Product launch announcement with no user reactions
 ✗ Completely empty body AND a neutral/informational title
+✗ Written in third person describing OTHER people's problems as a pitch or overview
+  (e.g. "Many accountants spend hours doing X" — this is a sales/marketing post,
+   not a personal pain signal. Real pain uses first person: "I spend hours doing X")
+✗ Founder/builder validation post asking if others would pay
+  (e.g. "Would you pay $10/month for X?", "I'm building X, would you use it?",
+   "Is there demand for X?" — these are market research, not pain signals)
 
 ALWAYS KEEP — even if it looks like a question:
 ✓ "Is there a tool that does X?" — this signals a missing solution
@@ -169,25 +175,51 @@ Your job: find ONLY pains worth building a business around.
 
 Analyze the provided search results and extract user pain points.
 
-SCORING CRITERIA:
-- frequency (1-5): how many different people face this repeatedly?
-  1 = one person, one time
-  5 = thousands of people, every week
-- emotion (1-5): frustration intensity
-  1 = mild inconvenience
-  5 = costs them money/clients/time, they're furious
-- monetizable (true/false): would someone pay $10-500/month to fix this?
-- score = (frequency + emotion) / 2
+SCORING — use the full 1-5 range. Most pains are 2-3. Reserve 4-5 for exceptional cases.
+
+FREQUENCY (1-5): how many different people face this repeatedly?
+  1 = one person mentioned it, unclear if others have it
+  2 = a few people in niche communities, once in a while
+  3 = clearly recurring across multiple posts/comments, dozens of people
+  4 = hundreds of people, mentioned regularly in professional communities
+  5 = ONLY if you see multiple posts + comments confirming it's universal in the niche
+
+  Calibration examples:
+  freq=2: "my specific client's CRM doesn't integrate with X"
+  freq=3: "I spend 2hrs/week copying data between two tools" (1 post, relatable)
+  freq=4: "manually reconciling invoices" — multiple posts, many upvotes, comments say "same here"
+  freq=5: "every FBA seller deals with lost inventory claims" — thread after thread, thousands affected
+
+EMOTION (1-5): how intense is the frustration in the actual text?
+  1 = neutral mention, no frustration expressed ("it would be nice if...")
+  2 = mild annoyance ("it's a bit annoying that...")
+  3 = clear frustration ("I hate having to do this every week")
+  4 = significant anger or financial impact ("this cost me a client", "I spent $500 fixing this")
+  5 = ONLY if: explicit financial loss + fury + recurring ("I'm losing $2k/month", "I've tried everything")
+
+  Calibration examples:
+  emo=2: "wish there was a better way to do X"
+  emo=3: "I have to manually do X every single day, it's exhausting"
+  emo=4: "this broken process cost me a client last week"
+  emo=5: "I've lost $3000 this month because of this, tried 4 tools, nothing works"
+
+score = (frequency + emotion) / 2
+monetizable (true/false): would the SUFFERER pay $10-500/month to fix this?
 
 MONETIZABLE CHECK — answer all three before setting monetizable=true:
   1. WHO experiences this pain? (e.g. buyer, seller, agent, freelancer, manager)
   2. WHO would actually pay for the fix? (the person with budget AND incentive)
   3. Are they the same person?
   → If the sufferer and the payer are different people: monetizable = false
-  Example: buyer frustrated by slow agent response — the BUYER suffers,
-  but agents don't pay to fix buyer frustration. monetizable = false.
-  Example: agent frustrated by having to manually follow up every lead —
-  the AGENT suffers AND would pay. monetizable = true.
+  → If the solution would require building a whole new marketplace/platform: monetizable = false
+
+  Examples:
+  ✗ Airbnb GUEST frustrated by cancellations — guest suffers, but guests don't
+    pay $X/month SaaS subscriptions to protect against rare cancellations.
+  ✗ Hotel CUSTOMER frustrated by prices — not a SaaS opportunity.
+  ✓ Airbnb HOST frustrated by manually coordinating cleaners after each checkout —
+    HOST suffers AND would pay $30/month for automation.
+  ✓ Agent frustrated by manually following up every lead — AGENT pays. monetizable = true.
 
 INCLUDE a pain if ALL of these are true:
 ✓ Affects many people repeatedly (not a one-time incident)
@@ -208,9 +240,16 @@ EXCLUDE a pain if ANY of these are true:
   Good: "every lead gen service I try overpromises and underdelivers" — systemic
 ✗ It requires changing human behavior, laws, or regulations
 ✗ It's a one-time event, not a recurring problem
-✗ A good cheap solution already exists
+✗ A good cheap solution already exists — before including, ask yourself:
+  "Can someone solve this today with a $20/month tool or a quick Google search?"
+  Bad: "translations are expensive" — DeepL, Lokalise, agencies exist
+  Bad: "can't track email opens" — Mailtrack, HubSpot free tier exist
+  Bad: "hard to schedule meetings" — Calendly free tier exists
+  Good: "our 3PL doesn't expose an API so I hand-copy 200 orders daily" — no good solution
 ✗ Score < 3.0
 ✗ Pure recommendation request with no frustration expressed
+✗ Founder validation post: "Would you pay for X?", "I'm building X, would you use it?"
+  — these describe a solution, not a personal pain experience
 ✗ The person who suffers would not be the one paying for a fix
 
 FOR QUOTES:
